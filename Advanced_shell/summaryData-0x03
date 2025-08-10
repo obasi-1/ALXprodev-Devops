@@ -1,8 +1,10 @@
+>'">
+```bash
 #!/usr/bin/env bash
 
 # This script generates a summary report for multiple Pokémon.
-# It reads all JSON files, creates a CSV report, and calculates
-# the average height and weight using awk.
+# It reads all JSON files, creates a CSV report by appending each line,
+# and then calculates the average height and weight using awk.
 
 # Define the directory containing the Pokémon JSON files.
 DATA_DIR="pokemon_data"
@@ -17,32 +19,37 @@ fi
 
 echo "Generating CSV Report at: $OUTPUT_FILE"
 
-# Use a temporary file to store the formatted data before processing with awk.
-TEMP_FILE=$(mktemp)
+# Start the CSV file with the header, overwriting any previous content.
+echo "Name,Height (m),Weight (kg)" > "$OUTPUT_FILE"
 
-# Create the CSV data using jq and store it in the temporary file.
-# We also sort the output by Pokémon name to match the sample.
-jq -r '[
-    .name,
-    (.height / 10),
-    (.weight / 10)
-  ] | @csv' "$DATA_DIR"/*.json | sort -t ',' -k1 > "$TEMP_FILE"
+# Loop through all files ending with .json in the specified directory.
+for file in "$DATA_DIR"/*.json; do
+  # Check if a file was found (handle case where no .json files exist)
+  if [ -e "$file" ]; then
+    # Use jq to extract the required data and format it as a single CSV line.
+    # The output is sorted to match the sample.
+    jq -r --arg filename "$(basename "$file" .json)" '
+      [
+        (.name | sub("^[a-z]"; . | ascii_upcase)),
+        (.height / 10),
+        (.weight / 10)
+      ] | @csv
+    ' "$file" | sort -t ',' -k1 >> "$OUTPUT_FILE"
+  fi
+done
 
-# The main awk script to process the data.
-# It reads the temporary CSV data, calculates averages, and prints the report.
+# The main awk script to process the data from the newly created CSV file.
+# It skips the header and calculates the averages.
 awk '
 BEGIN {
   # Set the field separator to a comma for CSV processing.
   FS=","
-  # Print the CSV header.
-  print "Name,Height (m),Weight (kg)"
   total_height = 0
   total_weight = 0
   count = 0
 }
-{
-  # Print the CSV data row.
-  print
+# Skip the header line.
+NR > 1 {
   # Accumulate the total height and weight, and increment the count.
   total_height += $2
   total_weight += $3
@@ -50,14 +57,14 @@ BEGIN {
 }
 END {
   # Calculate the averages.
-  avg_height = total_height / count
-  avg_weight = total_weight / count
+  if (count > 0) {
+    avg_height = total_height / count
+    avg_weight = total_weight / count
   
-  # Print the final averages in the required format.
-  printf "\nAverage Height: %.2f m\n", avg_height
-  printf "Average Weight: %.2f kg\n", avg_weight
+    # Print the final averages in the required format to standard output.
+    printf "\nAverage Height: %.2f m\n", avg_height
+    printf "Average Weight: %.2f kg\n", avg_weight
+  }
 }
-' "$TEMP_FILE" > >(tee "$OUTPUT_FILE")
-
-# Remove the temporary file.
-rm "$TEMP_FILE"
+' "$OUTPUT_FILE"
+```
