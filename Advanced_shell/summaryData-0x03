@@ -1,49 +1,48 @@
 #!/usr/bin/env bash
 
-# This script fetches data for a list of Pokémon from the Pokémon API.
-# For each Pokémon, it saves the response to a separate JSON file.
+# This script extracts specific Pokémon data from data.json
+# and formats it using a pipeline of jq, sed, and awk.
+# The final string is constructed using a template defined within the script.
 
-# Define the list of Pokémon to fetch data for.
-POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
-
-# Define the API base URL.
-API_BASE_URL="https://pokeapi.co/api/v2/pokemon/"
-
-# Define the directory to save the JSON files.
-OUTPUT_DIR="pokemon_data"
-
-# Check if the output directory exists, if not, create it.
-if [ ! -d "$OUTPUT_DIR" ]; then
-  mkdir -p "$OUTPUT_DIR"
-  echo "Created directory: $OUTPUT_DIR"
+# The script first checks if the data file exists.
+if [ ! -f "data.json" ]; then
+  echo "Error: data.json not found. Please run the API automation script first to create it." >&2
+  exit 1
 fi
 
-# Loop through the list of Pokémon.
-for pokemon in "${POKEMON_LIST[@]}"; do
-  echo "Fetching data for $pokemon..."
+# Define the template string with placeholders
+TEMPLATE_STRING="$name is of type $type, weighs ${formatted_weight}kg, and is ${formatted_height}m tall."
 
-  # Construct the full API URL and the output file path.
-  API_URL="${API_BASE_URL}${pokemon}"
-  JSON_FILE="${OUTPUT_DIR}/${pokemon}.json"
+# Pipeline command to extract, modify, and format the data.
+# 1. jq extracts the raw values for name, type, weight, and height and
+#    prints each on a new line. Weight and height are converted to kg and m.
+# 2. sed capitalizes the first letter of the first two lines (name and type).
+#    The -E flag enables extended regular expressions.
+# 3. awk reads the four lines of data, replaces the placeholders in the
+#    TEMPLATE_STRING with the actual values, and prints the result.
+jq -r '.name, .types[0].type.name, (.weight / 10), (.height / 10)' data.json | \
+sed -E '1s/(.)/\U\1/; 2s/(.)/\U\1/' | \
+awk -v template="$TEMPLATE_STRING" '
+  BEGIN {
+    # Initialize a counter for the lines
+    i=1
+  }
+  {
+    # Assign each line to the correct variable
+    if (i==1) name=$0
+    else if (i==2) type=$0
+    else if (i==3) formatted_weight=$0
+    else if (i==4) formatted_height=$0
+    i++
+  }
+  END {
+    # Replace the placeholders in the template string with the extracted values
+    gsub(/\$name/, name, template)
+    gsub(/\$type/, type, template)
+    gsub(/\$\{formatted_weight\}/, formatted_weight, template)
+    gsub(/\$\{formatted_height\}/, formatted_height, template)
 
-  # Make the API request using curl and save the response directly to a file.
-  # The -s flag is for silent mode, and the -o flag specifies the output file.
-  # The -f flag makes curl fail silently on HTTP errors (e.g., 404),
-  # which we can check with the exit code.
-  curl -s -o "$JSON_FILE" "$API_URL"
-
-  # Check the exit status of the curl command.
-  # A zero exit status means success.
-  if [ $? -eq 0 ]; then
-    echo "Saved data to $JSON_FILE ✅"
-  else
-    # If the command failed, log an error and remove the empty file.
-    echo "Error: Failed to fetch data for $pokemon. Check the Pokémon's name." >&2
-    rm -f "$JSON_FILE" # Remove the empty file created on failure
-  fi
-
-  # Add a short delay to avoid rate-limiting issues.
-  sleep 1
-done
-
-echo "Batch processing complete."
+    # Print the final formatted string
+    print template
+  }
+'
