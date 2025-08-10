@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# This script fetches data for a list of Pokémon from the Pokémon API.
+# For each Pokémon, it saves the response to a separate JSON file.
+
+# Define the list of Pokémon to fetch data for.
+POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+
+# Define the API base URL.
+API_BASE_URL="https://pokeapi.co/api/v2/pokemon/"
+
+# Define the directory to save the JSON files.
+OUTPUT_DIR="pokemon_data"
+
+# Check if the output directory exists, if not, create it.
+if [ ! -d "$OUTPUT_DIR" ]; then
+  mkdir -p "$OUTPUT_DIR"
+  echo "Created directory: $OUTPUT_DIR"
+fi
+
+# Loop through the list of Pokémon.
+for pokemon in "${POKEMON_LIST[@]}"; do
+  echo "Fetching data for $pokemon..."
+
+  # Construct the full API URL and the output file path.
+  API_URL="${API_BASE_URL}${pokemon}"
+  JSON_FILE="${OUTPUT_DIR}/${pokemon}.json"
+
+  # Make the API request using curl and save the response directly to a file.
+  # The -s flag is for silent mode, and the -o flag specifies the output file.
+  # The -f flag makes curl fail silently on HTTP errors (e.g., 404),
+  # which we can check with the exit code.
+  curl -s -o "$JSON_FILE" "$API_URL"
+
+  # Check the exit status of the curl command.
+  # A zero exit status means success.
+  if [ $? -eq 0 ]; then
+    echo "Saved data to $JSON_FILE ✅"
+  else
+    # If the command failed, log an error and remove the empty file.
+    echo "Error: Failed to fetch data for $pokemon. Check the Pokémon's name." >&2
+    rm -f "$JSON_FILE" # Remove the empty file created on failure
+  fi
+
+  # Add a short delay to avoid rate-limiting issues.
+  sleep 1
+done
+
+echo "Batch processing complete."
