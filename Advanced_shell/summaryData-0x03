@@ -1,4 +1,4 @@
->'">
+>' and 'sed'">
 ```bash
 #!/usr/bin/env bash
 
@@ -30,11 +30,11 @@ for file in "$DATA_DIR"/*.json; do
     # The output is sorted to match the sample.
     jq -r --arg filename "$(basename "$file" .json)" '
       [
-        (.name | sub("^[a-z]"; . | ascii_upcase)),
+        .name,
         (.height / 10),
         (.weight / 10)
       ] | @csv
-    ' "$file" | sort -t ',' -k1 >> "$OUTPUT_FILE"
+    ' "$file" | sed -E 's/^"([a-z])/\U\1/;s/,([a-z])/\U\1/' | sort -t ',' -k1 >> "$OUTPUT_FILE"
   fi
 done
 
