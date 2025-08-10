@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 
 # This script fetches data for a list of Pokémon from the Pokémon API.
-# For each Pokémon, it saves the response to a separate JSON file.
+# It includes a retry mechanism for failed requests and a delay
+# to handle potential rate-limiting issues.
 
 # Define the list of Pokémon to fetch data for.
-POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon" "invalid-pokemon")
 
 # Define the API base URL.
 API_BASE_URL="https://pokeapi.co/api/v2/pokemon/"
 
 # Define the directory to save the JSON files.
 OUTPUT_DIR="pokemon_data"
+
+# Define retry parameters.
+MAX_RETRIES=3
+RETRY_DELAY=2 # seconds
 
 # Check if the output directory exists, if not, create it.
 if [ ! -d "$OUTPUT_DIR" ]; then
@@ -25,24 +30,40 @@ for pokemon in "${POKEMON_LIST[@]}"; do
   # Construct the full API URL and the output file path.
   API_URL="${API_BASE_URL}${pokemon}"
   JSON_FILE="${OUTPUT_DIR}/${pokemon}.json"
-
-  # Make the API request using curl and save the response directly to a file.
-  # The -s flag is for silent mode, and the -o flag specifies the output file.
-  # The -f flag makes curl fail silently on HTTP errors (e.g., 404),
-  # which we can check with the exit code.
-  curl -s -o "$JSON_FILE" "$API_URL"
-
-  # Check the exit status of the curl command.
-  # A zero exit status means success.
-  if [ $? -eq 0 ]; then
-    echo "Saved data to $JSON_FILE ✅"
-  else
-    # If the command failed, log an error and remove the empty file.
-    echo "Error: Failed to fetch data for $pokemon. Check the Pokémon's name." >&2
-    rm -f "$JSON_FILE" # Remove the empty file created on failure
+  
+  # A flag to check if the request was successful.
+  SUCCESS=false
+  
+  # Loop for retries.
+  for ((i=1; i<=MAX_RETRIES; i++)); do
+    # Make the API request using curl and save the response directly to a file.
+    # The -s flag is for silent mode, and the -o flag specifies the output file.
+    # The -f flag makes curl fail on HTTP errors (e.g., 404), which is what we want.
+    curl -s -f -o "$JSON_FILE" "$API_URL"
+    
+    # Check the exit status of the curl command.
+    # A zero exit status means success.
+    if [ $? -eq 0 ]; then
+      echo "Saved data to $JSON_FILE ✅"
+      SUCCESS=true
+      break # Exit the retry loop on success.
+    else
+      # If the request failed, check if this is the last retry attempt.
+      if [ $i -lt $MAX_RETRIES ]; then
+        echo "Request failed for $pokemon. Retrying in $RETRY_DELAY seconds... (Attempt $i/$MAX_RETRIES)"
+        sleep "$RETRY_DELAY"
+      fi
+    fi
+  done
+  
+  # If the request was not successful after all retries, log the error.
+  if [ "$SUCCESS" = false ]; then
+    echo "Error: Failed to fetch data for $pokemon after $MAX_RETRIES attempts. Skipping. ❌" >&2
+    # Remove any empty file that might have been created by the failed curl attempt.
+    rm -f "$JSON_FILE"
   fi
 
-  # Add a short delay to avoid rate-limiting issues.
+  # Add a short delay between processing different Pokémon to avoid rate-limiting.
   sleep 1
 done
 
