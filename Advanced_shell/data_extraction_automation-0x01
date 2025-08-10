@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
 
-# This script extracts and formats specific data from the data.json file.
-# It uses the 'jq' command to parse the JSON and format the output string.
+# This script extracts specific Pokémon data from data.json
+# and formats it using a pipeline of jq, sed, and awk.
 
-# Check if the data.json file exists.
-# This is a good practice to ensure the script doesn't fail on a missing file.
+# The script first checks if the data file exists.
 if [ ! -f "data.json" ]; then
   echo "Error: data.json not found. Please run the API automation script first to create it." >&2
   exit 1
 fi
 
-# Use jq to extract the name, type, weight, and height.
-#
-# The -r flag outputs the raw string without quotes.
-# We use a single string with placeholders to build the final output.
-#
-# .name: Gets the Pokémon's name.
-# .types[0].type.name: Accesses the first type's name.
-# .weight / 10: The API provides weight in hectograms, so we divide by 10 for kilograms.
-# .height / 10: The API provides height in decimeters, so we divide by 10 for meters.
-jq -r '"\(.name | sub("^[a-z]"; . | ascii_upcase)) is of type \(.types[0].type.name | sub("^[a-z]"; . | ascii_upcase)), weighs \(.weight / 10)kg, and is \(.height / 10)m tall."' data.json
+# Pipeline command to extract, modify, and format the data.
+# 1. jq extracts the raw values for name, type, weight, and height and
+#    prints each on a new line. Weight and height are converted to kg and m.
+# 2. sed capitalizes the first letter of the first two lines (name and type).
+#    The -E flag enables extended regular expressions.
+# 3. awk reads the four lines of data, assigns them to variables, and
+#    prints the final, formatted string.
+jq -r '.name, .types[0].type.name, (.weight / 10), (.height / 10)' data.json | \
+sed -E '1s/(.)/\U\1/; 2s/(.)/\U\1/' | \
+awk '
+  NR==1 { name=$0 }      # Read the name from the first line
+  NR==2 { type=$0 }      # Read the type from the second line
+  NR==3 { weight=$0 }    # Read the weight from the third line
+  NR==4 { height=$0 }    # Read the height from the fourth line
+  END {
+    # After reading all lines, print the final formatted string
+    printf("%s is of type %s, weighs %skg, and is %sm tall.\n", name, type, weight, height);
+  }
+'
