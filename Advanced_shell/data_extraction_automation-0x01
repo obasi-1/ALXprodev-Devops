@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+# This script extracts and formats specific data from the data.json file.
+# It uses the 'jq' command to parse the JSON and format the output string.
+
+# Check if the data.json file exists.
+# This is a good practice to ensure the script doesn't fail on a missing file.
+if [ ! -f "data.json" ]; then
+  echo "Error: data.json not found. Please run the API automation script first to create it." >&2
+  exit 1
+fi
+
+# Use jq to extract the name, type, weight, and height.
+#
+# The -r flag outputs the raw string without quotes.
+# We use a single string with placeholders to build the final output.
+#
+# .name: Gets the Pokémon's name.
+# .types[0].type.name: Accesses the first type's name.
+# .weight / 10: The API provides weight in hectograms, so we divide by 10 for kilograms.
+# .height / 10: The API provides height in decimeters, so we divide by 10 for meters.
+jq -r '"\(.name | sub("^[a-z]"; . | ascii_upcase)) is of type \(.types[0].type.name | sub("^[a-z]"; . | ascii_upcase)), weighs \(.weight / 10)kg, and is \(.height / 10)m tall."' data.json
