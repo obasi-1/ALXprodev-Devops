@@ -1,48 +1,45 @@
 #!/usr/bin/env bash
 
-# This script extracts specific Pokémon data from data.json
-# and formats it using a pipeline of jq, sed, and awk.
-# The final string is constructed using a template defined within the script.
+# This script summarizes key data for multiple Pokémon from individual JSON files
+# and exports the summary to a single CSV file.
 
-# The script first checks if the data file exists.
-if [ ! -f "data.json" ]; then
-  echo "Error: data.json not found. Please run the API automation script first to create it." >&2
+# Define the directory containing the Pokémon JSON files.
+DATA_DIR="pokemon_data"
+# Define the output CSV file.
+OUTPUT_FILE="pokemon_summary.csv"
+
+# Check if the data directory exists and is not empty.
+if [ ! -d "$DATA_DIR" ] || [ -z "$(ls -A "$DATA_DIR")" ]; then
+  echo "Error: The '$DATA_DIR' directory does not exist or is empty. Please run the batch processing script first." >&2
   exit 1
 fi
 
-# Define the template string with placeholders
-TEMPLATE_STRING="$name is of type $type, weighs ${formatted_weight}kg, and is ${formatted_height}m tall."
+echo "Generating summary of Pokémon data and saving to '$OUTPUT_FILE'..."
 
-# Pipeline command to extract, modify, and format the data.
-# 1. jq extracts the raw values for name, type, weight, and height and
-#    prints each on a new line. Weight and height are converted to kg and m.
-# 2. sed capitalizes the first letter of the first two lines (name and type).
-#    The -E flag enables extended regular expressions.
-# 3. awk reads the four lines of data, replaces the placeholders in the
-#    TEMPLATE_STRING with the actual values, and prints the result.
-jq -r '.name, .types[0].type.name, (.weight / 10), (.height / 10)' data.json | \
-sed -E '1s/(.)/\U\1/; 2s/(.)/\U\1/' | \
-awk -v template="$TEMPLATE_STRING" '
-  BEGIN {
-    # Initialize a counter for the lines
-    i=1
-  }
-  {
-    # Assign each line to the correct variable
-    if (i==1) name=$0
-    else if (i==2) type=$0
-    else if (i==3) formatted_weight=$0
-    else if (i==4) formatted_height=$0
-    i++
-  }
-  END {
-    # Replace the placeholders in the template string with the extracted values
-    gsub(/\$name/, name, template)
-    gsub(/\$type/, type, template)
-    gsub(/\$\{formatted_weight\}/, formatted_weight, template)
-    gsub(/\$\{formatted_height\}/, formatted_height, template)
+# Use a single redirection to create the CSV file.
+# The header and all subsequent data lines will be piped into this redirection.
+{
+  # Output the CSV header.
+  echo "Name,Type,Weight (kg),Height (m)"
 
-    # Print the final formatted string
-    print template
-  }
-'
+  # Loop through all files ending with .json in the specified directory.
+  for file in "$DATA_DIR"/*.json; do
+    # Check if a file was found (handle case where no .json files exist)
+    if [ -e "$file" ]; then
+      # Use jq to extract the required data and format it as a single CSV line.
+      # The .name and .types[0].type.name are quoted to handle potential commas.
+      # The .weight and .height values are converted from hectograms/decimeters
+      # to kilograms/meters.
+      jq -r --arg filename "$(basename "$file" .json)" '
+        [
+          (.name | sub("^[a-z]"; . | ascii_upcase)),
+          (.types[0].type.name | sub("^[a-z]"; . | ascii_upcase)),
+          (.weight / 10),
+          (.height / 10)
+        ] | @csv
+      ' "$file"
+    fi
+  done
+} > "$OUTPUT_FILE"
+
+echo "Summary complete. Data saved to '$OUTPUT_FILE'."
