@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+# This script fetches data for Pikachu from the Pokémon API.
+# It saves the successful response to data.json and logs any errors to errors.txt.
+
+# Define the API endpoint for Pikachu
+API_URL="https://pokeapi.co/api/v2/pokemon/pikachu"
+
+# Define the output files
+JSON_FILE="data.json"
+ERROR_FILE="errors.txt"
+
+# Make the API request using curl.
+# -s: Silent mode, hides the progress meter.
+# -w "%{http_code}": Prints the HTTP status code to stdout.
+# The `curl` command is wrapped in `$(...)` to capture its output.
+# The output is then split into the response body and the HTTP status code.
+RESPONSE=$(curl -s -w "%{http_code}" "$API_URL")
+
+# Extract the HTTP status code (the last 3 characters of the response)
+HTTP_CODE="${RESPONSE: -3}"
+
+# Extract the response body (everything except the last 3 characters)
+BODY="${RESPONSE:0:${#RESPONSE}-3}"
+
+# Check if the HTTP status code is 200 (OK)
+if [[ "$HTTP_CODE" -eq 200 ]]; then
+  echo "$BODY" > "$JSON_FILE"
+  echo "Successfully fetched data and saved to $JSON_FILE."
+else
+  # If the request failed, log the error
+  echo "$(date): Error - Failed to fetch data from $API_URL. HTTP Status Code: $HTTP_CODE" > "$ERROR_FILE"
+  echo "Failed to fetch data. Error logged to $ERROR_FILE."
+fi
